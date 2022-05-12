@@ -16,8 +16,10 @@ GLOBAL_LOSS = 'Loss'
 
 logger = logging.getLogger(__name__)
 class BaseServer(object):
-    def __init__(self, config, clients, global_model, testset, device, current_round=0, records_save_filename=None, vis=None):
+    def __init__(self, config, clients, client_class, global_model, fl_trainset, testset, device, current_round=0, records_save_filename=None, vis=None):
         self.config = config.server
+        
+        self.client_class = client_class
         self.clients = clients
         self.selected_clients = None
 
@@ -25,7 +27,9 @@ class BaseServer(object):
         self.aggregated_model_dict = None
       
         self.train_time = 0
+        self.fl_trainset = fl_trainset
         self.testset = testset
+        self.train_batchsize = config.client.batch_size 
     
         self.local_updates= {}
 
@@ -35,7 +39,9 @@ class BaseServer(object):
 
         self.train_records = {GLOBAL_ROUND: [], GLOBAL_ACC: [], GLOBAL_LOSS: []}
         self.records_save_filename = records_save_filename
-        self.write_one_row(one_raw=list(self.train_records.keys()), save_path=self.config.records_save_folder, save_file_name=self.records_save_filename)
+        
+        if not config.resume:
+            self.write_one_row(one_raw=list(self.train_records.keys()), save_path=self.config.records_save_folder, save_file_name=self.records_save_filename)
 
         self.vis = vis
 
@@ -56,14 +62,15 @@ class BaseServer(object):
         self.train_records[GLOBAL_ROUND] = self.current_round 
         self.train_records[GLOBAL_ACC] = acc
         self.train_records[GLOBAL_LOSS] = loss
+        
         self.write_one_row(one_raw=[self.current_round, acc, loss], save_path=self.config.records_save_folder, save_file_name=self.records_save_filename)
         
 
         self.train_time = time.time() - start_time
         logger.debug('{}th round use {:.4f}s.'.format(self.current_round, self.train_time))
         if self.vis is not None:
-            vis_scalar(vis=self.vis, figure_name=GLOBAL_ACC, scalar_name=GLOBAL_ACC, x=self.current_round, y=acc)
-            vis_scalar(vis=self.vis, figure_name=GLOBAL_LOSS, scalar_name=GLOBAL_LOSS, x=self.current_round, y=loss)
+            vis_scalar(vis=self.vis, figure_name=f'{self.config.records_save_folder}/{self.records_save_filename}/{GLOBAL_ACC}', scalar_name=GLOBAL_ACC, x=self.current_round, y=acc)
+            vis_scalar(vis=self.vis, figure_name=f'{self.config.records_save_folder}/{self.records_save_filename}/{GLOBAL_LOSS}', scalar_name=GLOBAL_LOSS, x=self.current_round, y=loss)
             
 
         self.current_round += 1
@@ -72,6 +79,9 @@ class BaseServer(object):
     def multiple_steps(self):
         for _ in range(self.config.rounds):
             self.one_step()
+            self.save_the_checkpoint(save_path=self.config.records_save_folder, save_file_name=self.records_save_filename + '_checkpoint')
+        # self.save_global_model(save_path=self.config.records_save_folder, save_file_name='global_model' + self.records_save_filename)
+        
         return self.global_model
 
 
@@ -80,6 +90,7 @@ class BaseServer(object):
         
         Args:
             clients: list[Object:'BaseClient']. 
+            clients_id: list[int], index or clients_id list
             clients_per_round: int;  the number of clients in each round        
         
         Return:
@@ -103,7 +114,14 @@ class BaseServer(object):
         '''
         if len(self.selected_clients) > 0:
             for client in self.selected_clients:
-                self.local_updates[client.client_id] = {'model': client.step(global_model=self.global_model).state_dict(), 'size': client.train_datasize}    
+                self.local_updates[client] = {
+                    'model': self.client_class.step(global_model=self.global_model, client_id=client, local_trainset=self.fl_trainset.get_dataloader(client, batch_size=self.train_batchsize)).state_dict(),
+                    'size': self.fl_trainset.get_client_datasize(client_id=client)
+                }
+
+                # self.local_updates[client.client_id] = {'model': client.step(global_model=self.global_model).state_dict(), 'size': client.train_datasize}    
+                # client.clear_model()
+        
         else:
             logger.warning('No clients in this round')
             self.local_updates = None
@@ -174,6 +192,31 @@ class BaseServer(object):
 
     def set_global_model(self, model):
         self.global_model = copy.deepcopy(model)
+
+    def save_global_model(self, save_path, save_file_name):
+        if os.path.exists(os.path.join(save_path, save_file_name)):
+            logger.info('Overwrite the existing file {}'.format(os.path.join(save_path, save_file_name)))
+        else:
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+        
+        torch.save(self.global_model, os.path.join(save_path, save_file_name))
+
+
+    def save_the_checkpoint(self, save_path, save_file_name):
+        if os.path.exists(os.path.join(save_path, save_file_name)):
+            logger.info('Overwrite the existing file {}'.format(os.path.join(save_path, save_file_name)))
+        else:
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+        
+        checkpoint = {
+            'model': self.global_model,
+            'round': self.current_round
+        }
+
+        torch.save(checkpoint, os.path.join(save_path, save_file_name))
+        
 
     def save_test_records(self, save_path, save_file_name):
         header = list(self.train_records.keys())

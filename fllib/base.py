@@ -5,6 +5,8 @@ import time
 import logging
 import copy
 import random
+
+import yaml
 from fllib.datasets.base import BaseDataset, FederatedDataset
 from fllib.client.base import BaseClient
 from fllib.server.base import BaseServer
@@ -28,9 +30,10 @@ class BaseFL(object):
     Each time the package is imported, a instance of BaseFL will be initilized.
     '''
     def __init__(self):
-        self.server = None
-        self.clients = None
         self.config = None
+        self.server = None
+        
+        self.client_class = None    
         self.clients_id = None
         
         self.source_dataset = None
@@ -40,12 +43,16 @@ class BaseFL(object):
         self.vis = None
         
         self.global_model = None
+        self.model_channel = 1
+        self.num_class = 10
+
         self.exp_name = None
+        
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     
-    def init_config(self, config):
+    def init_config(self, config, exp_name=None):
         '''Initialize the configuration from yaml files or dict from the code
 
         Args:
@@ -56,6 +63,10 @@ class BaseFL(object):
         '''
         self.config = config
 
+        self.init_exp_name(exp_name=exp_name)
+
+        # save the param file
+        OmegaConf.save(config=self.config, f=f'{self.config.server.records_save_folder}/param.yaml')
         logger.info('Configurations loaded.')
 
     def init_source_dataset(self, source_dataset=None):
@@ -74,6 +85,8 @@ class BaseFL(object):
             self.fl_dataset = fl_dataset
         else:
             trainset, testset = self.init_source_dataset()
+
+            self.model_channels = trainset[0][0].shape[0]
             
             self.clients_id = self.init_clients_id()
             self.fl_dataset = FederatedDataset(data_name=self.config.dataset.data_name,
@@ -88,27 +101,33 @@ class BaseFL(object):
                                                 min_size=self.config.dataset.min_size
                                                 )
 
+            self.num_class = self.fl_dataset.get_num_class()
+
+
         self.testset_loader = self.fl_dataset.get_dataloader(client_id=None, 
                                                             batch_size=self.config.client.test_batch_size,
                                                             istrain=False)
 
-        self.exp_name =  datetime.datetime.now().strftime('%Y%m%d%H%M') + self.fl_dataset.store_file_name
+        # self.exp_name =  datetime.datetime.now().strftime('%Y%m%d%H%M') + self.fl_dataset.store_file_name
 
         logger.info('FL dataset distributed successfully.')
 
         return self.fl_dataset
 
 
-    def init_server(self):
+    def init_server(self, current_round=0):
         logger.info('Server initialization.')
+        
         self.server = BaseServer(config=self.config, 
-                                clients=self.clients, 
-                                global_model=self.global_model, 
+                                clients=self.clients_id, 
+                                client_class=self.client_class,
+                                global_model=self.global_model,
+                                fl_trainset=self.fl_dataset,
                                 testset=self.testset_loader, 
                                 device=self.device,
-                                records_save_filename=self.exp_name,
-                                vis=self.vis
-                                )
+                                current_round=current_round,
+                                records_save_filename=self.config.trial_name,
+                                vis=self.vis)
      
         
 
@@ -121,29 +140,18 @@ class BaseFL(object):
 
     def init_clients(self):
         logger.info('Clients initialization.')
-        self.clients = []
-        for cid in self.clients_id:
-            local_trainset_loader = self.fl_dataset.get_dataloader(cid, batch_size=self.config.client.batch_size)
-            local_testset_loader = self.fl_dataset.get_dataloader(cid, batch_size=self.config.client.batch_size, istrain=False)
-            train_datasize = self.fl_dataset.get_client_datasize(client_id=cid)
-            client = BaseClient(client_id=cid, 
-                                config=self.config, 
-                                local_trainset=local_trainset_loader, 
-                                local_testset=local_testset_loader, 
-                                device=self.device, 
-                                train_datasize=train_datasize)
 
-            self.clients.append(client)
+        self.client_class = BaseClient(config=self.config, device=self.device)
 
-        
-        return self.clients
+      
+        return self.client_class
 
 
     def init_global_model(self, global_model=None):
         if global_model is not None:
             self.global_model = copy.deepcopy(global_model)
         else:
-            self.global_model = load_model(self.config.server.model_name)
+            self.global_model = load_model(model_name=self.config.server.model_name, num_class=self.num_class, channels = self.model_channels)
 
         return self.global_model
 
@@ -154,26 +162,71 @@ class BaseFL(object):
         else:
             self.vis = Visdom()
 
+    def init_exp_name(self, exp_name=None):
+        if exp_name is not None:
+            self.exp_name = exp_name
+        else:
+            if self.config.dataset.distribution_type == 'iid':
+                distribution_args = 0
+            elif self.config.dataset.distribution_type == 'non_iid_class':
+                distribution_args = self.config.dataset.class_per_client
+            elif self.config.dataset.distribution_type == 'non_iid_dir':
+                distribution_args = self.config.dataset.alpha
+
+
+
+            self.exp_name = '{}_{}_c{}_p{}_{}_{}_le{}_lr{}'.format(self.config.dataset.data_name,
+                                                        self.config.dataset.distribution_type + str(distribution_args),
+                                                        self.config.server.clients_num,
+                                                        self.config.server.clients_per_round,
+                                                        self.config.server.aggregation_rule + self.config.server.aggregation_detail,
+                                                        self.config.server.model_name,
+                                                        self.config.client.local_epoch,
+                                                        self.config.client.optimizer.lr)
+
+            
+            self.config.server.records_save_folder = os.path.join(self.config.server.records_save_folder , self.exp_name)
+            if not os.path.exists(self.config.server.records_save_folder):
+                os.makedirs(self.config.server.records_save_folder)
+
+
 
         
-    def init_fl(self, config=None, global_model=None, fl_dataset=None):
-        self.init_config(config=config)
+    def init_fl(self, config=None, global_model=None, fl_dataset=None, exp_name=None, current_round=0):
+        self.init_config(config=config, exp_name=exp_name)
+        
+        self.init_fl_dataset(fl_dataset=fl_dataset)
+
+        if self.config.resume:
+            if (global_model is None) and (current_round==0):
+                global_model, current_round = self.load_checkpoint()
+        
         self.init_global_model(global_model=global_model)
 
-        self.init_fl_dataset(fl_dataset=fl_dataset)
         self.init_clients()
 
         if self.config.is_visualization:
             self.init_visualization()
 
-        self.init_server()
+        self.init_server(current_round=current_round)
 
     def run(self):
         start_time = time.time()
 
-        self.server.multiple_steps()
+        self.global_model = self.server.multiple_steps()
         logger.info('Total training time {:.4f}s'.format(time.time() - start_time))
 
+
+    def load_checkpoint(self):
+        if os.path.exists(f'{self.config.server.records_save_folder}/{self.config.trial_name}_checkpoint'):
+            checkpoint = torch.load(f'{self.config.server.records_save_folder}/{self.config.trial_name}_checkpoint')
+            global_model = checkpoint['model']
+            current_round = checkpoint['round']
+            logger.info(f'Checkpoint successfully loaded from {self.config.server.records_save_folder}/{self.config.trial_name}_checkpoint')
+        else:
+            global_model = None
+            current_round = 0
+        return global_model, current_round
 
 global_fl = BaseFL()
 

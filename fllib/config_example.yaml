@@ -1,8 +1,8 @@
 dataset:
-  data_name: "mnist"
+  data_name: "cifar10"
   root: '../../Data'
   download: true
-  simulated: true
+  simulated: false
   simulated_root: './simulated/'
   distribution_type: 'iid' # options: iid, non_iid_class, non_iid_dir
   class_per_client: 2
@@ -12,22 +12,21 @@ dataset:
 
 server: 
   clients_num: 100
-  rounds: 100
+  rounds: 300
   clients_per_round: 10
   random_select: true
   aggregation_rule: fedavg
   aggregation_detail: equal
   loss_fn: "cross_entropy"  # options: cross_entropy, mse; defualt is cross entropy
   test_interval: 1
-  model_name: LeNet5
+  model_name: vgg9  # options: LeNet5, vgg9
   records_save_folder: './results/'
   
-
 
 client:
   batch_size: 32
   test_batch_size: 32
-  local_epoch: 3
+  local_epoch: 1
   loss_fn: "cross_entropy"  # options: cross_entropy, mse; defualt is cross entropy
   optimizer:
     type: "Adam" # options: Adam, SGD
@@ -38,3 +37,7 @@ client:
 log_level: "DEBUG" #options: DEBUG INFO
 seed: 0
 is_visualization: true # if true, start the visdom first
+trial_name: 'test'
+resume: true
+
+

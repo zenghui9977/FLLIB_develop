@@ -14,34 +14,26 @@ class BaseClient(object):
     '''The base client class in federated learning
 
     '''
-    def __init__(self, client_id, config, local_trainset, local_testset, device, train_datasize):
-        self.client_id = client_id
+    def __init__(self, config, device):
+        
         self.config = config.client
 
-        self.local_trainset = local_trainset
-        self.train_datasize = train_datasize
-        self.local_testset = local_testset
-
         self.device = device
-
-        # self.compressed_model = None
+        
         self.local_model = None
-
-        self.train_time = 0
 
         self.train_records = {CLIENT_ACC: [], CLIENT_LOSS: []}
 
     def download(self, model):
         '''  Download the global model from the server, the global model might be compressed
         '''
-        # if self.compressed_model is not None:
-        #     self.compressed_model.load_state_dict(model.state_dict())
-        # else:
-        #     self.compressed_model = copy.deepcopy(model)
+    
         if self.local_model is not None:
             self.local_model.load_state_dict(model.state_dict())
         else:
             self.local_model = copy.deepcopy(model)
+
+
 
     # def decompress(self):
     #     ''' The function is set to be overwritten if there is a compress algorithm applied.
@@ -86,7 +78,7 @@ class BaseClient(object):
         return optimizer
 
 
-    def train(self):
+    def train(self, client_id, local_trainset):
         ''' Local training.
 
         Key variables:
@@ -103,7 +95,7 @@ class BaseClient(object):
         for e in range(self.config.local_epoch):
             batch_loss = []
             train_accuracy.reset()
-            for imgs, labels in self.local_trainset:
+            for imgs, labels in local_trainset:
                 imgs, labels = imgs.to(self.device), labels.to(self.device)
                 optimizer.zero_grad()
                 outputs = self.local_model(imgs)
@@ -118,6 +110,9 @@ class BaseClient(object):
                 # pred = outputs.data.max(1)[1]
                 # correct += pred.eq(labels.data.view_as(pred)).sum().item()
                 _ = train_accuracy(outputs, labels)
+                
+                # del imgs, labels, outputs, loss
+                # torch.cuda.empty_cache()
 
             current_epoch_loss = np.mean(batch_loss)
             # current_epoch_acc = float(correct)/float(self.train_datasize)
@@ -125,30 +120,31 @@ class BaseClient(object):
 
             self.train_records[CLIENT_LOSS].append(current_epoch_loss)
             self.train_records[CLIENT_ACC].append(current_epoch_acc)
-            logger.debug('Client: {}, local epoch: {}, loss: {:.4f}, acc: {:.4f}'.format(self.client_id, e, current_epoch_loss, current_epoch_acc))
-        self.train_time = time.time() - start_time
-        logger.debug('Client: {}, training {:.4f}s'.format(self.client_id, self.train_time))
+            logger.debug('Client: {}, local epoch: {}, loss: {:.4f}, acc: {:.4f}'.format(client_id, e, current_epoch_loss, current_epoch_acc))
+        train_time = time.time() - start_time
+        logger.debug('Client: {}, training {:.4f}s'.format(client_id, train_time))
 
-
-    # def compress(self):
-    #     '''The description is shown in the function decompress
-    #     '''
-    #     self.compressed_model = self.local_model
-    #     # self.local_model = None
 
     def upload(self):
         '''Upload the local models(compressed, if it is) to the server
         '''
         return self.local_model
 
-    def step(self, global_model, is_train=True):
+    def step(self, global_model, client_id, local_trainset, is_train=True):
         
         self.download(global_model)       
         if is_train:
             # self.train_preparation()
-            self.train() 
+            self.train(client_id, local_trainset) 
              
         return self.upload()
+
+    def clear_model(self):
+        del self.local_model
+        torch.cuda.empty_cache()
+        self.local_model = None
+        
+
 
 
 

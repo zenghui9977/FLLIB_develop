@@ -77,6 +77,8 @@ class FederatedDataset(object):
         self.trainset = trainset
         self.testset = testset
         self.idx_dict = self.build_idx_dict()
+
+        
         
         self.data_name = data_name
 
@@ -150,5 +152,8 @@ class FederatedDataset(object):
     
     def get_total_datasize(self):
         return len(self.trainset)
+
+    def get_num_class(self):
+        return len(self.idx_dict)
                 
         

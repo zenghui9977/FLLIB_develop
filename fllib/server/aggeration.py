@@ -32,11 +32,11 @@ def FedAvg(local_updates, agg_type='equal'):
         for name, param in aggregated_model_dict.items():
             if agg_type == 'equal':
                 for i in range(updates_num):
-                    param += torch.div(local_models[i][name], updates_num)
+                    param = param + torch.div(local_models[i][name], updates_num)
                 aggregated_model_dict[name] = param
             elif agg_type == 'weight_by_size':
                 for i in range(updates_num):
-                    param += torch.mul(local_models[i][name], weights[i])
+                    param = param + torch.mul(local_models[i][name], weights[i])
                 aggregated_model_dict[name] = param
 
     return aggregated_model_dict
