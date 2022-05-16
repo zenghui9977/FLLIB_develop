@@ -189,6 +189,7 @@ class BaseFL(object):
         if exp_name is not None:
             self.exp_name = exp_name
         else:
+            # distribution_args
             if self.config.dataset.distribution_type == 'iid':
                 distribution_args = 0
             elif self.config.dataset.distribution_type == 'non_iid_class':
@@ -196,6 +197,7 @@ class BaseFL(object):
             elif self.config.dataset.distribution_type == 'non_iid_dir':
                 distribution_args = self.config.dataset.alpha
 
+            # optimizer_args
             if self.config.client.optimizer.type == 'Adam':
                 optimizer_args = 'lr{}_m{}_de{}'.format(self.config.client.optimizer.lr, self.config.client.optimizer.momentum, self.config.client.optimizer.weight_decay)
 
@@ -205,14 +207,18 @@ class BaseFL(object):
             elif self.config.client.optimizer.type == 'FedProx':
                 optimizer_args = 'mu{}'.format(self.config.client.optimizer.mu)
             
-            
+            # aggregation_detail
+            if self.config.server.aggregation_rule == 'fedavg':
+                aggregation_detail = '[{}]'.format(self.config.server.aggregation_detail.type) 
+            elif self.config.server.aggregation_rule == 'krum':
+                aggregation_detail = '[f{}m{}]'.format(self.config.server.aggregation_detail.f, self.config.server.aggregation_detail.m)
 
             
             self.exp_name = '{}_{}_c{}_p{}_{}_{}_le{}_{}_{}'.format(self.config.dataset.data_name,
                                                         self.config.dataset.distribution_type + str(distribution_args),
                                                         self.config.server.clients_num,
                                                         self.config.server.clients_per_round,
-                                                        self.config.server.aggregation_rule + self.config.server.aggregation_detail,
+                                                        self.config.server.aggregation_rule + aggregation_detail,
                                                         self.config.server.model_name,
                                                         self.config.client.local_epoch,
                                                         self.config.client.optimizer.type,

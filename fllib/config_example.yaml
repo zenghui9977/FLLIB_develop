@@ -1,5 +1,5 @@
 dataset:
-  data_name: "cifar10"
+  data_name: "cifar10" # options: 'mnist', 'fmnist', 'kmnist', 'emnist', 'cifar10', 'cifar100'
   root: '../../Data'
   download: true
   simulated: false
@@ -15,8 +15,11 @@ server:
   rounds: 300
   clients_per_round: 10
   random_select: true
-  aggregation_rule: fedavg
-  aggregation_detail: equal
+  aggregation_rule: fedavg  # options: fedavg, krum
+  aggregation_detail:
+    type: equal # options: fedavg: equal, weight_by_size; krum: krum, multi-krum
+    f: 2
+    m: 0.3
   loss_fn: "cross_entropy"  # options: cross_entropy, mse; defualt is cross entropy
   test_interval: 1
   model_name: vgg9  # options: LeNet5, vgg9

@@ -7,7 +7,7 @@ import logging
 import torchmetrics
 import os
 import gc
-from fllib.server.aggeration import FedAvg
+from fllib.server.aggeration import FedAvg, Krum
 from fllib.server.visualization import vis_scalar
 
 GLOBAL_ROUND = 'Round'
@@ -141,8 +141,12 @@ class BaseServer(object):
             
         else:
             if aggregation_algorithm == 'fedavg':
-                self.aggregated_model_dict = FedAvg(self.local_updates, agg_type=self.config.aggregation_detail)
-            
+                self.aggregated_model_dict = FedAvg(self.local_updates, agg_type=self.config.aggregation_detail.type)
+            elif aggregation_algorithm == 'krum':
+                self.aggregated_model_dict = Krum(self.local_updates, f=self.config.aggregation_detail.f, m=self.config.aggregation_detail.m)
+
+
+
         return self.aggregated_model_dict
 
     def update_global_model(self):

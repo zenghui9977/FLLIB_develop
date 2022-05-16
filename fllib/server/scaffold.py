@@ -86,7 +86,7 @@ class ScaffoldServer(BaseServer):
             self.local_updates = None
         return self.local_updates
 
-    #TODO rewrite the save_the_checkpoint and add load_checkpoint
+    # rewrite the save_the_checkpoint and add load_checkpoint
     def save_the_checkpoint(self, save_path, save_file_name):
         if os.path.exists(os.path.join(save_path, save_file_name)):
             logger.info('Overwrite the existing file {}'.format(os.path.join(save_path, save_file_name)))

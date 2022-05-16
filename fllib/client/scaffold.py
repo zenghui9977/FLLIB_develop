@@ -16,6 +16,11 @@ CLIENT_LOSS = 'train_loss'
 max_norm = 10
 
 class ScaffoldClient(BaseClient):
+    '''
+    Paper 
+    (2020 ICML) SCAFFold: Stochastic Controlled Averaging for Federated Learning
+    url: http://proceedings.mlr.press/v119/karimireddy20a/karimireddy20a.pdf
+    '''
     def __init__(self, config, device):
         super(ScaffoldClient, self).__init__(config, device)
 

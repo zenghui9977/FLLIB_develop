@@ -1,5 +1,5 @@
 import copy
-
+import numpy as np
 import torch
 
 
@@ -42,7 +42,74 @@ def FedAvg(local_updates, agg_type='equal'):
     return aggregated_model_dict
 
 
+def compute_distance(v1, v2):
+    distance = []
+    for key in v1.keys():
+        distance.append(torch.linalg.norm(v1[key].float() - v2[key].float()))
+    return np.linalg.norm(distance, ord==2)
 
+
+def get_closests(w, f):
+    client_num = len(w)
+    closests = np.zeros((client_num, client_num))
+    for i in range(client_num):
+        for j in range(client_num):
+            if i < j:
+                distance = compute_distance(w[i], w[j])
+                closests[i][j] = distance
+                closests[j][i] = distance
+    if 2 * f + 2 > client_num:
+        f = int(np.floor((client_num - 2)/2.0))
+    thr = client_num - 2 - f
+    closests = np.sort(closests)[:, 1:(1+thr)]
+
+    return closests
+
+def get_krum_scores(closests):
+    scores = closests.sum(axis=-1)
+    return scores
+
+def Krum(local_updates, f, m):
+    '''Aggregate the local updates by using Krum
+
+    Paper:
+    (2017 NIPS) Machine Learning with Adversaries: Byzantine Tolerant Gradient Descent
+    url: https://proceedings.neurips.cc/paper/2017/file/f4b9ec30ad9f68f89b29639786cb62ef-Paper.pdf
+
+    Args:
+        local_updates: the local updates including the data size from the selected clients
+        f: the krum threshold of the closests /neighbors
+        m: the number of the local updates 
+    '''
+    local_models = [local_updates[i]['model'] for i in local_updates.keys()]
+    closests = get_closests(w=local_models, f=f)
+
+    scores = get_krum_scores(closests)
+
+    m = int(len(local_models) * m)
+    min_idx = scores.argsort()[:m]
+    aggregated_model_dict = mimic_blank_model(local_models[0])
+    # aggregate the selected m local updates, the distance of these updates are more closer than others
+    
+    # multi-Krum, if Krum, set the m = 1
+    with torch.no_grad():
+        for name, param in aggregated_model_dict.items():
+            for i in min_idx:
+                param = param + torch.div(local_models[i][name], m)
+            aggregated_model_dict[name] = param
+    
+    return aggregated_model_dict
+
+
+def Zeno(local_updates):
+    '''Aggregate the local updates by using Zeno
+    
+    
+    Args:
+        local_updates: the local updates including the data size from the selected clients
+    '''
+    #TODO
+    pass
 
     
                 
