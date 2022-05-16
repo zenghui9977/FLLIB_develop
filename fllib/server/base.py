@@ -6,7 +6,7 @@ import torch
 import logging
 import torchmetrics
 import os
-
+import gc
 from fllib.server.aggeration import FedAvg
 from fllib.server.visualization import vis_scalar
 
@@ -72,16 +72,17 @@ class BaseServer(object):
             vis_scalar(vis=self.vis, figure_name=f'{self.config.records_save_folder}/{self.records_save_filename}/{GLOBAL_ACC}', scalar_name=GLOBAL_ACC, x=self.current_round, y=acc)
             vis_scalar(vis=self.vis, figure_name=f'{self.config.records_save_folder}/{self.records_save_filename}/{GLOBAL_LOSS}', scalar_name=GLOBAL_LOSS, x=self.current_round, y=loss)
             
-
         self.current_round += 1
+        
         return self.global_model
 
     def multiple_steps(self):
         for _ in range(self.config.rounds):
             self.one_step()
             self.save_the_checkpoint(save_path=self.config.records_save_folder, save_file_name=self.records_save_filename + '_checkpoint')
-        # self.save_global_model(save_path=self.config.records_save_folder, save_file_name='global_model' + self.records_save_filename)
-        
+            
+            gc.collect()
+            torch.cuda.empty_cache()     
         return self.global_model
 
 
@@ -115,12 +116,11 @@ class BaseServer(object):
         if len(self.selected_clients) > 0:
             for client in self.selected_clients:
                 self.local_updates[client] = {
-                    'model': self.client_class.step(global_model=self.global_model, client_id=client, local_trainset=self.fl_trainset.get_dataloader(client, batch_size=self.train_batchsize)).state_dict(),
+                    'model': self.client_class.step(global_model=self.global_model, 
+                                                    client_id=client, 
+                                                    local_trainset=self.fl_trainset.get_dataloader(client, batch_size=self.train_batchsize)).state_dict(),
                     'size': self.fl_trainset.get_client_datasize(client_id=client)
                 }
-
-                # self.local_updates[client.client_id] = {'model': client.step(global_model=self.global_model).state_dict(), 'size': client.train_datasize}    
-                # client.clear_model()
         
         else:
             logger.warning('No clients in this round')

@@ -155,5 +155,8 @@ class FederatedDataset(object):
 
     def get_num_class(self):
         return len(self.idx_dict)
+
+    def get_client_datasize_list(self):
+        return [len(self.clients_data[i]) for i in self.clients_id]
                 
         

@@ -24,7 +24,7 @@ class BaseClient(object):
 
         self.train_records = {CLIENT_ACC: [], CLIENT_LOSS: []}
 
-    def download(self, model):
+    def download(self, model, **kwargs):
         '''  Download the global model from the server, the global model might be compressed
         '''
     
@@ -130,29 +130,12 @@ class BaseClient(object):
         '''
         return self.local_model
 
-    def step(self, global_model, client_id, local_trainset, is_train=True):
+    def step(self, global_model, client_id, local_trainset, is_train=True, **kwargs):
         
-        self.download(global_model)       
+        self.download(model=global_model, kwargs=kwargs)       
         if is_train:
             # self.train_preparation()
             self.train(client_id, local_trainset) 
              
         return self.upload()
-
-    def clear_model(self):
-        del self.local_model
-        torch.cuda.empty_cache()
-        self.local_model = None
         
-
-
-
-
-
-
-
-
-    
-
-
-

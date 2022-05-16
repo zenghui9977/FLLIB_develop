@@ -29,10 +29,11 @@ client:
   local_epoch: 1
   loss_fn: "cross_entropy"  # options: cross_entropy, mse; defualt is cross entropy
   optimizer:
-    type: "Adam" # options: Adam, SGD
+    type: "Adam" # options: Adam, SGD, FedProx, Scaffold
     lr: 0.01
     momentum: 0.9
     weight_decay: 0
+    mu: 0.9
   
 log_level: "DEBUG" #options: DEBUG INFO
 seed: 0

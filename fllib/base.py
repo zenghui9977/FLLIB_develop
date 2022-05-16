@@ -7,8 +7,11 @@ import copy
 import random
 
 import yaml
+from fllib.client.fedprox import FedProxClient
+from fllib.client.scaffold import ScaffoldClient
 from fllib.datasets.base import BaseDataset, FederatedDataset
 from fllib.client.base import BaseClient
+from fllib.server.scaffold import ScaffoldServer
 from fllib.server.base import BaseServer
 from fllib.models.base import load_model
 from visdom import Visdom
@@ -116,20 +119,32 @@ class BaseFL(object):
 
 
     def init_server(self, current_round=0):
-        logger.info('Server initialization.')
+        if self.config.client.optimizer.type == 'Scaffold':
+            logger.info('Scaffold Server initialization.')
+            self.server = ScaffoldServer(config=self.config, 
+                                    clients=self.clients_id, 
+                                    client_class=self.client_class,
+                                    global_model=self.global_model,
+                                    fl_trainset=self.fl_dataset,
+                                    testset=self.testset_loader, 
+                                    device=self.device,
+                                    current_round=current_round,
+                                    records_save_filename=self.config.trial_name,
+                                    vis=self.vis)
+        else:
+            logger.info('Base Server initialization.')
+            self.server = BaseServer(config=self.config, 
+                                    clients=self.clients_id, 
+                                    client_class=self.client_class,
+                                    global_model=self.global_model,
+                                    fl_trainset=self.fl_dataset,
+                                    testset=self.testset_loader, 
+                                    device=self.device,
+                                    current_round=current_round,
+                                    records_save_filename=self.config.trial_name,
+                                    vis=self.vis)
         
-        self.server = BaseServer(config=self.config, 
-                                clients=self.clients_id, 
-                                client_class=self.client_class,
-                                global_model=self.global_model,
-                                fl_trainset=self.fl_dataset,
-                                testset=self.testset_loader, 
-                                device=self.device,
-                                current_round=current_round,
-                                records_save_filename=self.config.trial_name,
-                                vis=self.vis)
-     
-        
+            
 
     def init_clients_id(self):
         self.clients_id = []
@@ -139,9 +154,17 @@ class BaseFL(object):
 
 
     def init_clients(self):
-        logger.info('Clients initialization.')
 
-        self.client_class = BaseClient(config=self.config, device=self.device)
+        if self.config.client.optimizer.type == 'FedProx':
+            logger.info('FedProx Clients initialization.')
+            self.client_class = FedProxClient(config=self.config, device=self.device)
+        elif self.config.client.optimizer.type == 'Scaffold':
+            logger.info('Scaffold Clients initialization.')
+            self.client_class = ScaffoldClient(config=self.config, device=self.device)
+
+        else:
+            logger.info('Base Clients initialization.')
+            self.client_class = BaseClient(config=self.config, device=self.device)
 
       
         return self.client_class
@@ -173,16 +196,27 @@ class BaseFL(object):
             elif self.config.dataset.distribution_type == 'non_iid_dir':
                 distribution_args = self.config.dataset.alpha
 
+            if self.config.client.optimizer.type == 'Adam':
+                optimizer_args = 'lr{}_m{}_de{}'.format(self.config.client.optimizer.lr, self.config.client.optimizer.momentum, self.config.client.optimizer.weight_decay)
 
+            elif self.config.client.optimizer.type in ['SGD', 'Scaffold']:
+                optimizer_args = 'lr{}'.format(self.config.client.optimizer.lr)
 
-            self.exp_name = '{}_{}_c{}_p{}_{}_{}_le{}_lr{}'.format(self.config.dataset.data_name,
+            elif self.config.client.optimizer.type == 'FedProx':
+                optimizer_args = 'mu{}'.format(self.config.client.optimizer.mu)
+            
+            
+
+            
+            self.exp_name = '{}_{}_c{}_p{}_{}_{}_le{}_{}_{}'.format(self.config.dataset.data_name,
                                                         self.config.dataset.distribution_type + str(distribution_args),
                                                         self.config.server.clients_num,
                                                         self.config.server.clients_per_round,
                                                         self.config.server.aggregation_rule + self.config.server.aggregation_detail,
                                                         self.config.server.model_name,
                                                         self.config.client.local_epoch,
-                                                        self.config.client.optimizer.lr)
+                                                        self.config.client.optimizer.type,
+                                                        optimizer_args)
 
             
             self.config.server.records_save_folder = os.path.join(self.config.server.records_save_folder , self.exp_name)
@@ -192,7 +226,7 @@ class BaseFL(object):
 
 
         
-    def init_fl(self, config=None, global_model=None, fl_dataset=None, exp_name=None, current_round=0):
+    def init_fl(self, config=None, fl_dataset=None, global_model=None, server=None, client=None, exp_name=None, current_round=0):
         self.init_config(config=config, exp_name=exp_name)
         
         self.init_fl_dataset(fl_dataset=fl_dataset)
