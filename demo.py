@@ -4,13 +4,13 @@ config = {
     'dataset': {
         'data_name': 'mnist',
         'download': False,
-        'distribution_type': 'non_iid_dir',
+        'distribution_type': 'iid',
         'alpha': 0.5
     },
     'server': {
         'rounds': 20,
         'clients_per_round': 10,
-        'aggregation_rule': 'krum',
+        'aggregation_rule': 'zeno',
         'aggregation_detail': {
             'f': 2,
             'm': 0.3

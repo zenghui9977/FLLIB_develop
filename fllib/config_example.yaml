@@ -20,6 +20,8 @@ server:
     type: equal # options: fedavg: equal, weight_by_size; krum: krum, multi-krum
     f: 2
     m: 0.3
+    rho: 0.0005
+    b: 1
   loss_fn: "cross_entropy"  # options: cross_entropy, mse; defualt is cross entropy
   test_interval: 1
   model_name: vgg9  # options: LeNet5, vgg9

@@ -196,6 +196,8 @@ class BaseFL(object):
                 distribution_args = self.config.dataset.class_per_client
             elif self.config.dataset.distribution_type == 'non_iid_dir':
                 distribution_args = self.config.dataset.alpha
+            else:
+                distribution_args = 0
 
             # optimizer_args
             if self.config.client.optimizer.type == 'Adam':
@@ -206,12 +208,19 @@ class BaseFL(object):
 
             elif self.config.client.optimizer.type == 'FedProx':
                 optimizer_args = 'mu{}'.format(self.config.client.optimizer.mu)
+
+            else:
+                optimizer_args = 'lr{}'.format(self.config.client.optimizer.lr)
             
             # aggregation_detail
             if self.config.server.aggregation_rule == 'fedavg':
                 aggregation_detail = '[{}]'.format(self.config.server.aggregation_detail.type) 
             elif self.config.server.aggregation_rule == 'krum':
                 aggregation_detail = '[f{}m{}]'.format(self.config.server.aggregation_detail.f, self.config.server.aggregation_detail.m)
+            elif self.config.server.aggregation_rule == 'zeno':
+                aggregation_detail = '[rho{}b{}]'.format(self.config.server.aggregation_detail.rho, self.config.server.aggregation_detail.b)
+            else:
+                aggregation_detail = '[none]'
 
             
             self.exp_name = '{}_{}_c{}_p{}_{}_{}_le{}_{}_{}'.format(self.config.dataset.data_name,

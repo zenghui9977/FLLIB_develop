@@ -1,4 +1,5 @@
 import copy
+from re import L
 import numpy as np
 import torch
 
@@ -41,12 +42,18 @@ def FedAvg(local_updates, agg_type='equal'):
 
     return aggregated_model_dict
 
+def reshape_model_param(model_state_dict):
+    param_reshape = np.asarray([])
+    for _, w in model_state_dict.items():
+        param_reshape = np.hstack((param_reshape, w.detach().cpu().numpy().reshape(-1)))  
+    return param_reshape
+
 
 def compute_distance(v1, v2):
-    distance = []
-    for key in v1.keys():
-        distance.append(torch.linalg.norm(v1[key].float() - v2[key].float()))
-    return np.linalg.norm(distance, ord==2)
+    # distance = []
+    # for key in v1.keys():
+    #     distance.append(torch.linalg.norm(v1[key].float() - v2[key].float()))
+    return np.linalg.norm(reshape_model_param(v1) - reshape_model_param(v2), ord==2)
 
 
 def get_closests(w, f):
@@ -100,16 +107,59 @@ def Krum(local_updates, f, m):
     
     return aggregated_model_dict
 
+def compute_loss(loss_fn, model, param, samples):
+    temp_model = copy.deepcopy(model)
+    temp_model.load_state_dict(param)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    temp_model.to(device)
 
-def Zeno(local_updates):
+    with torch.no_grad():
+        imgs, labels = samples
+        imgs, labels = imgs.to(device), labels.to(device)
+
+        outputs = temp_model(imgs)
+        loss = loss_fn(outputs, labels)
+
+    return loss.item()
+
+
+
+def Zeno(local_updates, pre_global_model, loss_fn, samples, rho, b):
     '''Aggregate the local updates by using Zeno
     
-    
+    Paper:
+    (2019 ICML) Zeno: Distributed stochastic gradient descent with suspicion-based fault-tolerance
+    url: http://proceedings.mlr.press/v97/xie19b/xie19b.pdf
+
     Args:
         local_updates: the local updates including the data size from the selected clients
+        pre_global_model: the last round global model  
     '''
-    #TODO
-    pass
+
+    loss1 = compute_loss(loss_fn=loss_fn, model=pre_global_model, param=pre_global_model.state_dict(), samples=samples)
+    
+    local_models = [local_updates[i]['model'] for i in local_updates.keys()]
+    clients_num= len(local_updates)
+
+    scores = []
+    
+    for i in range(clients_num):
+        loss2 = compute_loss(loss_fn=loss_fn, model=pre_global_model, param=local_models[i], samples=samples)
+        scores.append(loss1 - loss2 - rho * compute_distance(pre_global_model.state_dict(), local_models[i]))
+    
+    score_idx = np.argsort(scores)[-(clients_num - b):]
+    len_score_idx = len(score_idx)
+
+    aggregated_model_dict = mimic_blank_model(local_models[0])
+    with torch.no_grad():
+        for name, param in aggregated_model_dict.items():
+            for i in score_idx:
+                param = param + torch.div(local_models[i][name], len_score_idx)
+            aggregated_model_dict[name] = param
+    
+    return aggregated_model_dict
+
+
 
     
                 

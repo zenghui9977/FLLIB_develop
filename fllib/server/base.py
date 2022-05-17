@@ -7,8 +7,9 @@ import logging
 import torchmetrics
 import os
 import gc
-from fllib.server.aggeration import FedAvg, Krum
+from fllib.server.aggeration import FedAvg, Krum, Zeno
 from fllib.server.visualization import vis_scalar
+import itertools
 
 GLOBAL_ROUND = 'Round'
 GLOBAL_ACC = 'Accuracy'
@@ -44,6 +45,10 @@ class BaseServer(object):
             self.write_one_row(one_raw=list(self.train_records.keys()), save_path=self.config.records_save_folder, save_file_name=self.records_save_filename)
 
         self.vis = vis
+
+        if self.config.aggregation_rule == 'zeno':
+            zeno_dataloader = copy.deepcopy(self.testset)
+            self.zeno_iter = itertools.cycle(zeno_dataloader)
 
 
     def one_step(self):
@@ -144,7 +149,15 @@ class BaseServer(object):
                 self.aggregated_model_dict = FedAvg(self.local_updates, agg_type=self.config.aggregation_detail.type)
             elif aggregation_algorithm == 'krum':
                 self.aggregated_model_dict = Krum(self.local_updates, f=self.config.aggregation_detail.f, m=self.config.aggregation_detail.m)
-
+            elif aggregation_algorithm == 'zeno':
+                loss_fn = self.load_loss_function()
+                samples = self.zeno_iter.__next__()
+                self.aggregated_model_dict = Zeno(local_updates=self.local_updates, 
+                                                pre_global_model=self.global_model, 
+                                                loss_fn=loss_fn,
+                                                samples=samples,
+                                                rho=self.config.aggregation_detail.rho,
+                                                b=self.config.aggregation_detail.b)
 
 
         return self.aggregated_model_dict
