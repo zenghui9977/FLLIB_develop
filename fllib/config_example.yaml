@@ -15,13 +15,15 @@ server:
   rounds: 300
   clients_per_round: 10
   random_select: true
-  aggregation_rule: fedavg  # options: fedavg, krum
+  aggregation_rule: fedavg  # options: fedavg, krum, zeno, median, fedprox, scaffold, feddyn
   aggregation_detail:
     type: equal # options: fedavg: equal, weight_by_size; krum: krum, multi-krum
     f: 2
     m: 0.3
     rho: 0.0005
     b: 1
+    mu: 0.001
+    feddyn_alpha: 0.01
   loss_fn: "cross_entropy"  # options: cross_entropy, mse; defualt is cross entropy
   test_interval: 1
   model_name: vgg9  # options: LeNet5, vgg9
@@ -34,11 +36,11 @@ client:
   local_epoch: 1
   loss_fn: "cross_entropy"  # options: cross_entropy, mse; defualt is cross entropy
   optimizer:
-    type: "Adam" # options: Adam, SGD, FedProx, Scaffold
+    type: "Adam" # options: Adam, SGD
     lr: 0.01
     momentum: 0.9
-    weight_decay: 0
-    mu: 0.9
+    weight_decay: 1e-3
+
   
 log_level: "DEBUG" #options: DEBUG INFO
 seed: 0

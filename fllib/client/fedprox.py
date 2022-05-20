@@ -17,6 +17,7 @@ class FedProxClient(BaseClient):
     
     def __init__(self, config, device):
         super(FedProxClient, self).__init__(config, device)
+        self.mu = config.server.aggregation_detail.mu
        
 
     def train(self, client_id, local_trainset):
@@ -43,7 +44,7 @@ class FedProxClient(BaseClient):
                     proximal_term = proximal_term + (w - w_t).norm(2) 
 
 
-                loss = loss_fn(outputs, labels) + (self.config.optimizer.mu / 2) * proximal_term
+                loss = loss_fn(outputs, labels) + (self.mu / 2) * proximal_term
                 
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(parameters=self.local_model.parameters(), max_norm=max_norm)

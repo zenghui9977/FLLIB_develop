@@ -7,7 +7,7 @@ import logging
 import torchmetrics
 import os
 import gc
-from fllib.server.aggeration import FedAvg, Krum, Zeno
+from fllib.server.aggeration import FedAvg, Krum, Marginal_Median, Zeno
 from fllib.server.visualization import vis_scalar
 import itertools
 
@@ -145,7 +145,7 @@ class BaseServer(object):
             self.aggregated_model_dict = self.global_model.state_dict()
             
         else:
-            if aggregation_algorithm == 'fedavg':
+            if aggregation_algorithm in ['fedavg', 'fedprox', 'scaffold', 'feddyn']:
                 self.aggregated_model_dict = FedAvg(self.local_updates, agg_type=self.config.aggregation_detail.type)
             elif aggregation_algorithm == 'krum':
                 self.aggregated_model_dict = Krum(self.local_updates, f=self.config.aggregation_detail.f, m=self.config.aggregation_detail.m)
@@ -158,6 +158,9 @@ class BaseServer(object):
                                                 samples=samples,
                                                 rho=self.config.aggregation_detail.rho,
                                                 b=self.config.aggregation_detail.b)
+            # median is not effective
+            # elif aggregation_algorithm == 'median':
+            #     self.aggregated_model_dict = Marginal_Median(local_updates=self.local_updates)
 
 
         return self.aggregated_model_dict

@@ -69,7 +69,7 @@ class BaseClient(object):
     def load_optimizer(self):
         
         if self.config.optimizer.type == 'Adam':
-            optimizer = torch.optim.Adam(self.local_model.parameters(), lr=self.config.optimizer.lr)
+            optimizer = torch.optim.Adam(self.local_model.parameters(), lr=self.config.optimizer.lr, weight_decay=self.config.optimizer.weight_decay)
         elif self.config.optimizer.type == 'SGD':
             optimizer = torch.optim.SGD(self.local_model.parameters(), lr=self.config.optimizer.lr, momentum=self.config.optimizer.momentum, weight_decay=self.config.optimizer.weight_decay)
         else:

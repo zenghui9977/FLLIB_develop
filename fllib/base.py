@@ -7,10 +7,12 @@ import copy
 import random
 
 import yaml
+from fllib.client.feddyn import FedDynClient
 from fllib.client.fedprox import FedProxClient
 from fllib.client.scaffold import ScaffoldClient
 from fllib.datasets.base import BaseDataset, FederatedDataset
 from fllib.client.base import BaseClient
+from fllib.server.feddyn import FedDynServer
 from fllib.server.scaffold import ScaffoldServer
 from fllib.server.base import BaseServer
 from fllib.models.base import load_model
@@ -20,6 +22,10 @@ import torch
 from omegaconf import OmegaConf
 
 logger = logging.getLogger(__name__)
+
+
+support_optimizer = ['Adam', 'SGD']
+
 
 def set_all_random_seed(seed):
     random.seed(seed)
@@ -119,7 +125,7 @@ class BaseFL(object):
 
 
     def init_server(self, current_round=0):
-        if self.config.client.optimizer.type == 'Scaffold':
+        if self.config.server.aggregation_rule  == 'scaffold':
             logger.info('Scaffold Server initialization.')
             self.server = ScaffoldServer(config=self.config, 
                                     clients=self.clients_id, 
@@ -131,6 +137,20 @@ class BaseFL(object):
                                     current_round=current_round,
                                     records_save_filename=self.config.trial_name,
                                     vis=self.vis)
+
+        elif self.config.server.aggregation_rule  == 'feddyn':
+            logger.info('FedDyn Server initialization.')
+            self.server = FedDynServer(config=self.config, 
+                                    clients=self.clients_id, 
+                                    client_class=self.client_class,
+                                    global_model=self.global_model,
+                                    fl_trainset=self.fl_dataset,
+                                    testset=self.testset_loader, 
+                                    device=self.device,
+                                    current_round=current_round,
+                                    records_save_filename=self.config.trial_name,
+                                    vis=self.vis)
+
         else:
             logger.info('Base Server initialization.')
             self.server = BaseServer(config=self.config, 
@@ -155,13 +175,15 @@ class BaseFL(object):
 
     def init_clients(self):
 
-        if self.config.client.optimizer.type == 'FedProx':
+        if self.config.server.aggregation_rule == 'fedprox':
             logger.info('FedProx Clients initialization.')
             self.client_class = FedProxClient(config=self.config, device=self.device)
-        elif self.config.client.optimizer.type == 'Scaffold':
+        elif self.config.server.aggregation_rule == 'scaffold':
             logger.info('Scaffold Clients initialization.')
             self.client_class = ScaffoldClient(config=self.config, device=self.device)
-
+        elif self.config.server.aggregation_rule == 'feddyn':
+            logger.info('FedDyn Clients initialization.')
+            self.client_class = FedDynClient(config=self.config, device=self.device)
         else:
             logger.info('Base Clients initialization.')
             self.client_class = BaseClient(config=self.config, device=self.device)
@@ -200,17 +222,12 @@ class BaseFL(object):
                 distribution_args = 0
 
             # optimizer_args
-            if self.config.client.optimizer.type == 'Adam':
-                optimizer_args = 'lr{}_m{}_de{}'.format(self.config.client.optimizer.lr, self.config.client.optimizer.momentum, self.config.client.optimizer.weight_decay)
 
-            elif self.config.client.optimizer.type in ['SGD', 'Scaffold']:
-                optimizer_args = 'lr{}'.format(self.config.client.optimizer.lr)
-
-            elif self.config.client.optimizer.type == 'FedProx':
-                optimizer_args = 'mu{}'.format(self.config.client.optimizer.mu)
-
+            if self.config.client.optimizer.type not in support_optimizer:
+                optimizer_args = '{}_lr{}_m{}_de{}'.format(support_optimizer[0], self.config.client.optimizer.lr, self.config.client.optimizer.momentum, self.config.client.optimizer.weight_decay)
             else:
-                optimizer_args = 'lr{}'.format(self.config.client.optimizer.lr)
+                optimizer_args = '{}_lr{}_m{}_de{}'.format(self.config.client.optimizer.type, self.config.client.optimizer.lr, self.config.client.optimizer.momentum, self.config.client.optimizer.weight_decay)
+
             
             # aggregation_detail
             if self.config.server.aggregation_rule == 'fedavg':
@@ -219,18 +236,25 @@ class BaseFL(object):
                 aggregation_detail = '[f{}m{}]'.format(self.config.server.aggregation_detail.f, self.config.server.aggregation_detail.m)
             elif self.config.server.aggregation_rule == 'zeno':
                 aggregation_detail = '[rho{}b{}]'.format(self.config.server.aggregation_detail.rho, self.config.server.aggregation_detail.b)
+            elif self.config.server.aggregation_rule == 'fedprox':
+                aggregation_detail = '[mu{}]'.format(self.config.server.aggregation_detail.mu)
+            elif self.config.server.aggregation_rule == 'scaffold':
+                aggregation_detail = ''
+            elif self.config.server.aggregation_rule == 'feddyn':
+                aggregation_detail = '[alpha{}]'.format(self.config.server.aggregation_detail.feddyn_alpha)
+
             else:
                 aggregation_detail = '[none]'
 
             
-            self.exp_name = '{}_{}_c{}_p{}_{}_{}_le{}_{}_{}'.format(self.config.dataset.data_name,
+            
+            self.exp_name = '{}_{}_N{}_p{}_{}_{}_E{}_{}'.format(self.config.dataset.data_name,
                                                         self.config.dataset.distribution_type + str(distribution_args),
                                                         self.config.server.clients_num,
                                                         self.config.server.clients_per_round,
                                                         self.config.server.aggregation_rule + aggregation_detail,
                                                         self.config.server.model_name,
                                                         self.config.client.local_epoch,
-                                                        self.config.client.optimizer.type,
                                                         optimizer_args)
 
             

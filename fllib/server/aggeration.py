@@ -160,6 +160,19 @@ def Zeno(local_updates, pre_global_model, loss_fn, samples, rho, b):
     return aggregated_model_dict
 
 
+def Marginal_Median(local_updates):
+
+    w_num = len(local_updates)
+    local_models = [local_updates[i]['model'] for i in local_updates.keys()]
+    aggregated_model_dict = mimic_blank_model(local_models[0])
+
+    with torch.no_grad():
+        for name, param in aggregated_model_dict.items():
+            layer_param = [local_models[i][name] for i in range(w_num)]
+            layer_param = torch.stack(tuple(layer_param), dim=-1).float()
+
+            aggregated_model_dict[name] = torch.quantile(layer_param, q=0.5, dim=-1)
+    return aggregated_model_dict
 
     
                 

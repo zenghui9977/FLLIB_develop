@@ -34,6 +34,8 @@ class ScaffoldServer(BaseServer):
         self.control_param = self.load_checkpoint_control_param(resume=config.resume, save_path=self.config.records_save_folder, save_file_name=self.records_save_filename+ '_checkpoint')
 
         self.n_minbatch = (np.ceil((self.fl_trainset.get_total_datasize() / self.config.clients_num)/self.train_batchsize) * config.client.local_epoch).astype(np.int64)
+
+        
         self.lr = config.client.optimizer.lr
 
     def init_weight_list(self):
@@ -42,6 +44,8 @@ class ScaffoldServer(BaseServer):
         self.weight_list = {}
         for i in range(self.config.clients_num):
             self.weight_list[self.clients[i]] = weight_list[i]
+        
+
         return self.weight_list
 
     def init_control_param(self):
@@ -61,7 +65,8 @@ class ScaffoldServer(BaseServer):
 
         if len(self.selected_clients) > 0:
             for client in self.selected_clients:
-                control_parameter_diff = torch.tensor(- self.control_param[client] + self.control_param[GLOBAL_CONTROL_PARAM_NAME]/self.weight_list[client], dtype=torch.float32, device=self.device)
+                control_parameter_diff = - self.control_param[client] + self.control_param[GLOBAL_CONTROL_PARAM_NAME]/self.weight_list[client]
+                
                 size = self.fl_trainset.get_client_datasize(client_id=client)
                 # local update is a model not state_dict()
                 local_update = self.client_class.step(global_model=self.global_model, 
@@ -69,8 +74,10 @@ class ScaffoldServer(BaseServer):
                                                     local_trainset=self.fl_trainset.get_dataloader(client, batch_size=self.train_batchsize),
                                                     control_parameter_diff=control_parameter_diff)
                 
-                new_control_param = - self.control_param[client] + self.control_param[GLOBAL_CONTROL_PARAM_NAME] + 1/self.n_minbatch/self.lr * local_update_diff_list(pre_model=pre_model, cur_model=local_update)
+                new_control_param =  self.control_param[client] - self.control_param[GLOBAL_CONTROL_PARAM_NAME] + 1/self.n_minbatch/self.lr * local_update_diff_list(pre_model=pre_model, cur_model=local_update)
+                
                 delta_control_param_sum += (new_control_param  - self.control_param[client]) * self.weight_list[client]
+                
 
                 self.control_param[client] = new_control_param
 
@@ -79,7 +86,7 @@ class ScaffoldServer(BaseServer):
                     'size': size
                 }
 
-            self.control_param[GLOBAL_CONTROL_PARAM_NAME] += 1/len(self.selected_clients) * delta_control_param_sum
+            self.control_param[GLOBAL_CONTROL_PARAM_NAME] += 1/len(self.clients) * delta_control_param_sum
             
         else:
             logger.warning('No clients in this round')
